@@ -1,0 +1,228 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+1a.
+ We learned in class that recurrent neural architectures can operate over
+ variable length input (i.e., the shape of the model parameters is independent
+ of the length of the input sentence).
+ Is the same true of convolutional architectures? Write one sentence to
+ explain why or why not:
+\end_layout
+
+\begin_layout Standard
+A: The same is true for convolutions - the model parameters shape is determined
+ by the kernel size, so the shape of the model parameters remains constant,
+ even with different input lengths.
+ However, one should note that RNNs carry information along the sequence,
+ while CNNs do not.
+ This is why RNNs may use only the final output to represent the entire
+ input (so the output is of constant length for any input sequence length),
+ there is little point in keeping only the final output of CNNs - i.e.
+ the output sequence size would be proportional to the input sequence length.
+\end_layout
+
+\begin_layout Standard
+1b.
+ We would need at least 
+\begin_inset Formula $k$
+\end_inset
+
+ characters for a kernel size of 
+\begin_inset Formula $k$
+\end_inset
+
+.
+ If 
+\begin_inset Formula $m_{\text{word}}+2$
+\end_inset
+
+ is more than 
+\begin_inset Formula $k$
+\end_inset
+
+, no padding will be needed, since all words will be of this length.
+ However, if 
+\begin_inset Formula $m_{\text{word}}+2$
+\end_inset
+
+ is less than 
+\begin_inset Formula $k$
+\end_inset
+
+, we will need padding to complete at least 
+\begin_inset Formula $k$
+\end_inset
+
+ characters.
+ That is, the required padding is 
+\begin_inset Formula $\min\left\{ k,m_{\text{word}}+2\right\} //2$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+1c.
+ The Highway layer is smoothly varying its behavior between that of normal
+ linear layer (
+\begin_inset Formula $x_{\text{proj}}$
+\end_inset
+
+) and that of a layer which simply passes its inputs (
+\begin_inset Formula $x_{\text{convout}}$
+\end_inset
+
+) through.
+ Use one or two sentences to explain why this behavior is useful in character
+ embeddings.
+ Based on the definition of 
+\begin_inset Formula $x_{\text{gate}}=\sigma\left(W_{\text{gate}}x_{\text{convout}}+b_{\text{gate}}\right)$
+\end_inset
+
+, do you think it is better to initialize 
+\begin_inset Formula $b_{\text{gate}}$
+\end_inset
+
+ be negative or positive? Explain your reason briefly.
+\end_layout
+
+\begin_layout Standard
+A: Initializing 
+\begin_inset Formula $b_{\text{gate}}$
+\end_inset
+
+ to 0 leaves the gate's value to be completely determined by the (most likely)
+ random initialization of the network, thus mixing the identity and activation
+ inputs randomly, which would be in line with the rest of the network; Looking
+ at exterme values, I first note that multiplying acts as a gradient router,
+ i.e.
+ 
+\begin_inset Formula $\nabla\left(x_{\text{gate}}x_{\text{activations}}+\left(1-x_{\text{gate}}\right)x_{\text{inputs}}\right)=x_{\text{activations}}\nabla x_{\text{gate}}+x_{\text{gate}}\nabla x_{\text{activations}}-x_{\text{inputs}}\nabla x_{\text{gate}}+\left(1-x_{\text{gate}}\right)\nabla x_{\text{inputs}}$
+\end_inset
+
+ (w.r.t.
+ upstream parameters).
+ Initializing 
+\begin_inset Formula $b_{\text{gate}}$
+\end_inset
+
+ to 
+\begin_inset Formula $-\infty$
+\end_inset
+
+, sets both the gate and its gradient to 0, causing only activations to
+ pass, ignoring the skip connection.
+ Initializing to 
+\begin_inset Formula $+\infty$
+\end_inset
+
+, the gate value will be 1 causing only the identity connection to pass,
+ but the gate gradient will be 0, so the activations are ignored.
+ I would then conclude that without any further assumptions on the model,
+ using 0 will be best, as it allows symmetric gradient flow to both activations
+ and raw inputs.
+ 
+\end_layout
+
+\begin_layout Standard
+* Use slightly negative values so that x_gate will be small so that mostly
+ the inputs will flow through.
+\end_layout
+
+\begin_layout Standard
+1d.
+ Describe 2 advantages of a Transformer encoder over the LSTM-with-attention
+ encoder in our NMT mode
+\end_layout
+
+\begin_layout Standard
+A: (i) The computational graph length for Transformers does not depend on
+ input length, whereas for RNNs it does.
+\end_layout
+
+\begin_layout Standard
+(ii) Transformers feature multiple attentions, which allow it to attend
+ to different relationships between tokens.
+\end_layout
+
+\begin_layout Standard
+(iii) use of self-attention allows 
+\end_layout
+
+\end_body
+\end_document

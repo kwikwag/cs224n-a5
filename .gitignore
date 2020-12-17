@@ -2,3 +2,10 @@
 /en_es_data
 /outputs
 /sanity_check_en_es_data
+/.vscode
+/__pycache__
+*~
+\#*#
+/vocab.json
+/vocab_tiny_q1.json
+/vocab_tiny_q2.json

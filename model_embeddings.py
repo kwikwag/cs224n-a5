@@ -28,7 +28,13 @@ class ModelEmbeddings(nn.Module):
     Class that converts input words to their CNN-based embeddings.
     """
 
-    def __init__(self, word_embed_size, vocab):
+    def __init__(
+        self, 
+        word_embed_size, 
+        vocab, 
+        char_embed_size=50, 
+        dropout_prob=0.3,
+        kernel_size=5):
         """
         Init the Embedding layer for one language
         @param word_embed_size (int): Embedding size (dimensionality) for the output word
@@ -39,10 +45,25 @@ class ModelEmbeddings(nn.Module):
         super(ModelEmbeddings, self).__init__()
 
         ### YOUR CODE HERE for part 1h
+        num_chars = len(vocab.char2id)
+        self.pad_value = num_chars
 
+        self.char_embed = nn.Embedding(
+            num_embeddings=num_chars+1,  # for padding character
+            embedding_dim=char_embed_size)
+
+        self.cnn = CNN(
+            embedding_dim=char_embed_size,
+            num_filters=word_embed_size,
+            kernel_size=kernel_size,
+        )
+
+        self.highway = Highway(word_embed_size)
+        
+        self.dropout = nn.Dropout(p=dropout_prob)
         ### END YOUR CODE
 
-    def forward(self, input):
+    def forward(self, inputs, input_lengths=None):
         """
         Looks up character-based CNN embeddings for the words in a batch of sentences.
         @param input: Tensor of integers of shape (sentence_length, batch_size, max_word_length) where
@@ -53,5 +74,39 @@ class ModelEmbeddings(nn.Module):
         """
         ### YOUR CODE HERE for part 1h
 
+        # (sentence_length, batch_size, max_word_len)
+        x = inputs
+
+        # convert to list of words
+        # (sentence_length, batch_size, max_word_len) =>
+        #     (sentence_length * batch_size, max_word_len)
+        x = x.view(-1, inputs.shape[-1])
+
+        # (sentence_length * batch_size, max_word_len) lookup on (num_chars, embedding_dim) => 
+        #     (sentence_length * batch_size, max_word_len, embedding_dim)
+        x = self.char_embed(x)
+
+        # (sentence_length * batch_size, max_word_len, embedding_dim) => 
+        #     (sentence_length * batch_size, embedding_dim, max_word_len)
+        x = x.transpose(1,2)
+
+        # (sentence_length * batch_size, embedding_dim, max_word_len) conv on
+        #     (sentence_length * word_embed_size, embedding_dim, kernel_size) => 
+        #     (sentence_length * batch_size, word_embed_size, max_word_len - (kernel_size - 1))
+        # and after the max pool we remain with (sentence_length * batch_size, word_embed_size)
+        x = self.cnn(x, input_lengths)
+
+        # (sentence_length * batch_size, word_embed_size)
+        x = self.highway(x)
+
+        # (sentence_length * batch_size, word_embed_size)
+        x = self.dropout(x)
+
+        # reshape into input shape
+        # (sentence_length * batch_size, word_embed_size) =>
+        #     (sentence_length, batch_size, word_embed_size)
+        x = x.view(*inputs.shape[:2], -1)
+
+        return x
         ### END YOUR CODE
 

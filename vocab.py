@@ -161,6 +161,19 @@ class VocabEntry(object):
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.contiguous
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.view
 
+        # Use `words2charindices()` from this file, which converts each character to its corresponding index in the
+        # character-vocabulary.
+        sents_numeric = self.words2charindices(sents)
+
+        # Use `pad_sents_char()` from utils.py, which pads all words to max_word_length of all words in the batch,
+        # and pads all sentences to max length of all sentences in the batch. Read __init__ to see how to get
+        # index of character-padding token
+        sents_numeric_padded = pad_sents_char(sents_numeric, self.char_pad)
+
+        # Connect these two parts to convert the resulting padded sentences to a torch tensor.
+        sents_tensor = torch.Tensor(sents_numeric_padded, device=device).transpose(0, 1)
+
+        return sents_tensor
         ### END YOUR CODE
 
     def to_input_tensor(self, sents: List[List[str]], device: torch.device) -> torch.Tensor:

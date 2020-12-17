@@ -50,7 +50,22 @@ class NMT(nn.Module):
         self.vocab = vocab
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
-
+        # (Bidirectional LSTM with bias)
+        self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bias=True, bidirectional=True)
+        # (LSTM Cell with bias)
+        self.decoder = nn.LSTMCell(input_size=embed_size + hidden_size, hidden_size=hidden_size, bias=True)
+        # (Linear Layer with no bias), called W_{h} in the PDF.
+        self.h_projection = nn.Linear(in_features=2*hidden_size, out_features=hidden_size, bias=False)
+        # (Linear Layer with no bias), called W_{c} in the PDF.
+        self.c_projection = nn.Linear(in_features=2*hidden_size, out_features=hidden_size, bias=False)
+        # (Linear Layer with no bias), called W_{attProj} in the PDF.
+        self.att_projection = nn.Linear(in_features=2*hidden_size, out_features=hidden_size, bias=False)
+        # (Linear Layer with no bias), called W_{u} in the PDF.
+        self.combined_output_projection = nn.Linear(in_features=3*hidden_size, out_features=hidden_size, bias=False)
+        # (Linear Layer with no bias), called W_{vocab} in the PDF.
+        self.target_vocab_projection = nn.Linear(in_features=hidden_size, out_features=len(vocab.tgt), bias=False)
+        # (Dropout Layer)
+        self.dropout = nn.Dropout(p=dropout_rate)
         ### END YOUR CODE FROM ASSIGNMENT 4
 
         if not no_char_decoder:
@@ -127,7 +142,38 @@ class NMT(nn.Module):
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
         ### Except replace "self.model_embeddings.source" with "self.model_embeddings_source"
+        # 1. Construct Tensor `X` of source sentences with shape (src_len, b, e) using the source model embeddings.
+        #     src_len = maximum source sentence length, b = batch size, e = embedding size.
+        X = self.model_embeddings_source(source_padded)
 
+        # 2. Compute `enc_hiddens`, `last_hidden`, `last_cell` by applying the encoder to `X`.
+        #     - Before you can apply the encoder, you need to apply the `pack_padded_sequence` function to X.
+        #     - After you apply the encoder, you need to apply the `pad_packed_sequence` function to enc_hiddens.
+        #     - Note that the shape of the tensor returned by the encoder is (src_len, b, h*2) and we want to
+        #       return a tensor of shape (b, src_len, h*2) as `enc_hiddens`.
+        packed_batch = pack_padded_sequence(X, source_lengths)
+        enc_hiddens_packed, (last_hidden, last_cell) = self.encoder(packed_batch)
+        enc_hiddens, _ = pad_packed_sequence(enc_hiddens_packed, batch_first=True)
+        
+
+        # 3. Compute `dec_init_state` = (init_decoder_hidden, init_decoder_cell):
+        #     - `init_decoder_hidden`:
+        #         `last_hidden` is a tensor shape (2, b, h). The first dimension corresponds to forwards and backwards.
+        #         Concatenate the forwards and backwards tensors to obtain a tensor shape (b, 2*h).
+        #         Apply the h_projection layer to this in order to compute init_decoder_hidden.
+        #         This is h_0^{dec} in the PDF. Here b = batch size, h = hidden size
+        #     - `init_decoder_cell`:
+        #         `last_cell` is a tensor shape (2, b, h). The first dimension corresponds to forwards and backwards.
+        #         Concatenate the forwards and backwards tensors to obtain a tensor shape (b, 2*h).
+        #         Apply the c_projection layer to this in order to compute init_decoder_cell.
+        #         This is c_0^{dec} in the PDF. Here b = batch size, h = hidden size
+        last_hidden_flat = torch.cat((last_hidden[0], last_hidden[1]), 1)
+        init_decoder_hidden = self.h_projection(last_hidden_flat)
+
+        last_cell_flat = torch.cat((last_cell[0], last_cell[1]), 1)
+        init_decoder_cell = self.c_projection(last_cell_flat)
+
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
         ### END YOUR CODE FROM ASSIGNMENT 4
 
         return enc_hiddens, dec_init_state
@@ -160,6 +206,35 @@ class NMT(nn.Module):
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
         ### Except replace "self.model_embeddings.target" with "self.model_embeddings_target"
+
+        # 1. Apply the attention projection layer to `enc_hiddens` to obtain `enc_hiddens_proj`,
+        #     which should be shape (b, src_len, h),
+        #     where b = batch size, src_len = maximum source length, h = hidden size.
+        #     This is applying W_{attProj} to h^enc, as described in the PDF.
+        enc_hiddens_proj = self.att_projection(enc_hiddens)  # (2*h, h) x (b, src_len, h*2) => (b, src_len, h)
+
+        # 2. Construct tensor `Y` of target sentences with shape (tgt_len, b, e) using the target model embeddings.
+        #     where tgt_len = maximum target sentence length, b = batch size, e = embedding size.
+        Y = self.model_embeddings_target(target_padded)  # (tgt_len, b) => (tgt_len, b, e)
+
+        # 3. Use the torch.split function to iterate over the time dimension of Y.
+        #     Within the loop, this will give you Y_t of shape (1, b, e) where b = batch size, e = embedding size.
+        #         - Squeeze Y_t into a tensor of dimension (b, e). 
+        #         - Construct Ybar_t by concatenating Y_t with o_prev on their last dimension
+        #         - Use the step function to compute the the Decoder's next (cell, state) values
+        #           as well as the new combined output o_t.
+        #         - Append o_t to combined_outputs
+        #         - Update o_prev to the new o_t.
+        for Y_t in torch.split(Y, 1):
+            Ybar_t = torch.cat((Y_t.squeeze(0), o_prev), 1)  # (b, e), (b, e)
+            dec_state, o_t, _ = self.step(Ybar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks)
+            combined_outputs.append(o_t)
+            o_prev = o_t
+
+        # 4. Use torch.stack to convert combined_outputs from a list length tgt_len of
+        #     tensors shape (b, h), to a single tensor shape (tgt_len, b, h)
+        #     where tgt_len = maximum target sentence length, b = batch size, h = hidden size.
+        combined_outputs = torch.stack(combined_outputs)
 
         ### END YOUR CODE FROM ASSIGNMENT 4
 
@@ -194,6 +269,10 @@ class NMT(nn.Module):
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
 
+        dec_state = self.decoder(Ybar_t, dec_state)  # (b, e + h) => (b, h), (b, h)
+        dec_hidden, dec_cell = dec_state  # (b, h)
+        e_t = torch.bmm(enc_hiddens_proj, torch.unsqueeze(dec_hidden, 2)).squeeze(2)  # (b, sec_len, h) x (b, h, 1) => (b, src_len)
+
         ### END YOUR CODE FROM ASSIGNMENT 4
 
         # Set e_t to -inf where enc_masks has 1
@@ -201,6 +280,12 @@ class NMT(nn.Module):
             e_t.data.masked_fill_(enc_masks.bool(), -float('inf'))
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
+
+        alpha_t = nn.functional.softmax(e_t, dim=1)  # (b, src_len)
+        a_t = torch.bmm(alpha_t.unsqueeze(1), enc_hiddens).squeeze(1) # (b, 1, src_len) * (b, src_len, 2*h) => (b, 2*h)
+        U_t = torch.cat((a_t, dec_hidden), 1) # (b, 2*h) + (b, h) -> (b, 3*h)
+        V_t = self.combined_output_projection(U_t)
+        O_t = self.dropout(torch.tanh(V_t))
 
         ### END YOUR CODE FROM ASSIGNMENT 4
 
