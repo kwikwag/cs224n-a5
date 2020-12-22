@@ -96,7 +96,7 @@ def question_2a_sanity_check(decoder, char_vocab):
     print ("-"*80)
     print("Running Sanity Check for Question 2a: CharDecoder.forward()")
     print ("-"*80)
-    sequence_length = 4
+    sequence_length = 7
     inpt = torch.zeros(sequence_length, BATCH_SIZE, dtype=torch.long)
     logits, (dec_hidden1, dec_hidden2) = decoder.forward(inpt)
     logits_expected_size = [sequence_length, BATCH_SIZE, len(char_vocab.char2id)]
@@ -128,7 +128,7 @@ def question_2c_sanity_check(decoder):
     print ("-"*80)
     print("Running Sanity Check for Question 2c: CharDecoder.decode_greedy()")
     print ("-"*80)
-    sequence_length = 4
+    sequence_length = 7
     inpt = torch.zeros(1, BATCH_SIZE, HIDDEN_SIZE, dtype=torch.float)
     initialStates = (inpt, inpt)
     device = decoder.char_output_projection.weight.device

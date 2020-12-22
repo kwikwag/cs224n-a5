@@ -12,6 +12,7 @@ Usage:
     run.py train --train-src=<file> --train-tgt=<file> --dev-src=<file> --dev-tgt=<file> --vocab=<file> [options]
     run.py decode [options] MODEL_PATH TEST_SOURCE_FILE OUTPUT_FILE
     run.py decode [options] MODEL_PATH TEST_SOURCE_FILE TEST_TARGET_FILE OUTPUT_FILE
+    run.py inference [options] MODEL_PATH SENTENCE
 
 Options:
     -h --help                               show this screen.
@@ -49,6 +50,7 @@ import time
 import re
 
 from docopt import docopt
+import nltk
 from nltk.translate.bleu_score import corpus_bleu, sentence_bleu, SmoothingFunction
 from nmt_model import Hypothesis, NMT
 import numpy as np
@@ -299,6 +301,53 @@ def decode(args: Dict[str, str]):
             # hyp_sent = ' '.join(top_hyp.value)
             f.write(hyp_sent + '\n')
 
+def corpus_from_list_of_strs(strs, wrap=None):
+    """ Read file, where each sentence is dilineated by a `\n`.
+    @param file_path (str): path to file containing corpus
+    @param source (str): "tgt" or "src" indicating whether text
+        is of the source language or target language
+    """
+    data = []
+    for line in strs:
+        sent = nltk.word_tokenize(line)
+        # only append <s> and </s> to the target sentence
+        if wrap is not None:
+            sent = [wrap[0]] + sent + [wrap[1]]
+        data.append(sent)
+
+    return data
+
+def inference(inputs, 
+    model_path='model.bin', 
+    beam_size=5,
+    max_decoding_time_step=70,
+    no_char_decoder=True, 
+    cuda=False):
+    """ Performs decoding on a test set, and save the best-scoring decoding results.
+    If the target gold-standard sentences are given, the function also computes
+    corpus-level BLEU score.
+    @param args (Dict): args from cmd line
+    """
+
+    test_data_src = corpus_from_list_of_strs(inputs)
+
+    model = NMT.load(model_path, no_char_decoder=no_char_decoder)
+
+    if cuda:
+        model = model.to(torch.device("cuda:0"))
+
+    hypotheses = beam_search(model, inputs,
+                             beam_size=beam_size,
+                             max_decoding_time_step=max_decoding_time_step)
+
+    for src_sent, hyps in zip(test_data_src, hypotheses):
+        top_hyp = hyps[0]
+        detokenizer = TreebankWordDetokenizer()
+        detokenizer.DOUBLE_DASHES = (re.compile(r'--'), r'--')
+        hyp_sent = detokenizer.detokenize(top_hyp.value)
+        print(hyp_sent)
+
+
 
 def beam_search(model: NMT, test_data_src: List[List[str]], beam_size: int, max_decoding_time_step: int) -> List[List[Hypothesis]]:
     """ Run beam search to construct hypotheses for a list of src-language sentences.
@@ -342,6 +391,15 @@ def main():
         train(args)
     elif args['decode']:
         decode(args)
+    elif args['inference']:
+        inference(
+            [args['SENTENCE']],
+            model_path=args['MODEL_PATH'],
+            beam_size=int(args['--beam-size']),
+            max_decoding_time_step=int(args['--max-decoding-time-step']),
+            no_char_decoder=args['--no-char-decoder'],
+            cuda=args['--cuda']
+        )
     else:
         raise RuntimeError('invalid run mode')
 

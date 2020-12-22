@@ -9,3 +9,5 @@
 /vocab.json
 /vocab_tiny_q1.json
 /vocab_tiny_q2.json
+/model*.bin
+/model*.bin.optim

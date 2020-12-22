@@ -51,9 +51,9 @@ class NMT(nn.Module):
 
         ### COPY OVER YOUR CODE FROM ASSIGNMENT 4
         # (Bidirectional LSTM with bias)
-        self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bias=True, bidirectional=True)
+        self.encoder = nn.LSTM(input_size=word_embed_size, hidden_size=hidden_size, bias=True, bidirectional=True)
         # (LSTM Cell with bias)
-        self.decoder = nn.LSTMCell(input_size=embed_size + hidden_size, hidden_size=hidden_size, bias=True)
+        self.decoder = nn.LSTMCell(input_size=word_embed_size + hidden_size, hidden_size=hidden_size, bias=True)
         # (Linear Layer with no bias), called W_{h} in the PDF.
         self.h_projection = nn.Linear(in_features=2*hidden_size, out_features=hidden_size, bias=False)
         # (Linear Layer with no bias), called W_{c} in the PDF.
@@ -97,6 +97,22 @@ class NMT(nn.Module):
         ###     - Add `source_padded_chars` for character level padded encodings for source
         ###     - Add `target_padded_chars` for character level padded encodings for target
         ###     - Modify calls to encode() and decode() to use the character level encodings
+        target_padded = self.vocab.tgt.to_input_tensor(target, device=self.device)   # Tensor: (tgt_len, b)
+        
+        source_padded_chars = self.vocab.src.to_input_tensor_char(source, device=self.device)  # (max_sentence_length, batch_size, max_word_length)
+        target_padded_chars = self.vocab.tgt.to_input_tensor_char(target, device=self.device)  # (max_sentence_length, batch_size, max_word_length)
+
+        # TODO : pass this on
+        # source_word_lengths = [[len(w) for w in s] for s in source]
+
+        # NOTE : it would have been somewhat more elegant to pass the embedded
+        #        words to self.encode() and self.decode() - then we wouldn't
+        #        have to modify their signatures and instead write the code
+        #        for retrieving the embeddings ourselves.
+
+        enc_hiddens, dec_init_state = self.encode(source_padded_chars, source_lengths)
+        enc_masks = self.generate_sent_masks(enc_hiddens, source_lengths)
+        combined_outputs = self.decode(enc_hiddens, enc_masks, dec_init_state, target_padded_chars)
 
         ### END YOUR CODE
 
@@ -361,7 +377,7 @@ class NMT(nn.Module):
             contiuating_hyp_scores = (hyp_scores.unsqueeze(1).expand_as(log_p_t) + log_p_t).view(-1)
             top_cand_hyp_scores, top_cand_hyp_pos = torch.topk(contiuating_hyp_scores, k=live_hyp_num)
 
-            prev_hyp_ids = top_cand_hyp_pos / len(self.vocab.tgt)
+            prev_hyp_ids = top_cand_hyp_pos // len(self.vocab.tgt)
             hyp_word_ids = top_cand_hyp_pos % len(self.vocab.tgt)
 
             new_hypotheses = []

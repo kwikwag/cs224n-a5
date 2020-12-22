@@ -48,6 +48,9 @@ class ModelEmbeddings(nn.Module):
         num_chars = len(vocab.char2id)
         self.pad_value = num_chars
 
+        # neccessary for validation code (nmt_model.save)
+        self.word_embed_size = word_embed_size
+
         self.char_embed = nn.Embedding(
             num_embeddings=num_chars+1,  # for padding character
             embedding_dim=char_embed_size)
@@ -80,7 +83,7 @@ class ModelEmbeddings(nn.Module):
         # convert to list of words
         # (sentence_length, batch_size, max_word_len) =>
         #     (sentence_length * batch_size, max_word_len)
-        x = x.view(-1, inputs.shape[-1])
+        x = x.reshape(-1, inputs.shape[-1])
 
         # (sentence_length * batch_size, max_word_len) lookup on (num_chars, embedding_dim) => 
         #     (sentence_length * batch_size, max_word_len, embedding_dim)
