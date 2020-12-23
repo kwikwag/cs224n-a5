@@ -108,14 +108,15 @@ class CharDecoder(nn.Module):
 
         # CrossEntropyLoss expects inputs (N, C) and (N)
         # where N is the number of tokens, and C is the number of classes
-        s = s.view(-1, self.char_vocab_len)
+        pred = s.view(-1, self.char_vocab_len)
         target = char_sequence[1:].view(-1)
 
-        return nn.CrossEntropyLoss(
+        loss = nn.CrossEntropyLoss(
             ignore_index=self.target_vocab.char_pad,
             reduction='sum'
-        )(s, target)
-        
+        )(pred, target)
+
+        return loss
         ### END YOUR CODE
 
     def decode_greedy(
@@ -142,6 +143,7 @@ class CharDecoder(nn.Module):
         ###      - You may find torch.argmax or torch.argmax useful
         ###      - We use curly brackets as start-of-word and end-of-word characters. That is, use the character '{' for <START> and '}' for <END>.
         ###        Their indices are self.target_vocab.start_of_word and self.target_vocab.end_of_word, respectively.
+ 
 
         # both (1, batch_size, word_hidden_size)
         h_0, c_0 = initialStates
@@ -154,6 +156,7 @@ class CharDecoder(nn.Module):
 
         # don't use [[]] * batch_size as this will copy the
         # reference to a single list for batch_size times
+        # decoded words
         outputs = [[] for _ in range(batch_size)]
 
         def append_chars_to_outputs(indices, chars):
@@ -171,9 +174,10 @@ class CharDecoder(nn.Module):
             s, (h_t, c_t) = self.forward(x_tm1, (h_tm1, c_tm1))
             
             # (1, current_batch_size, vocab_size) TODO : dim=2??
-            softmax_outputs = nn.Softmax(dim=2)(s)
+            # softmax_outputs = nn.Softmax(dim=2)(s)
+            # x_t = torch.argmax(softmax_outputs, dim=2)
             # (1, current_batch_size, vocab_size) => (1, current_batch_size)
-            x_t = torch.argmax(softmax_outputs, dim=2)
+            x_t = torch.argmax(s, dim=2)
 
             # check which indices match the end token
             # (current_batch_size,)
@@ -184,6 +188,8 @@ class CharDecoder(nn.Module):
             current_batch_word_indices = current_batch_word_indices[~completed_words]
             # (1, current_batch_size) => (1, current_batch_size to-be)
             x_t = x_t[:, ~completed_words]
+            h_t = h_t[:, ~completed_words]
+            c_t = c_t[:, ~completed_words]
             current_batch_size = current_batch_word_indices.size(0)
 
             if not current_batch_size:
@@ -200,6 +206,8 @@ class CharDecoder(nn.Module):
 
             iteration_count += 1
             x_tm1 = x_t
+            h_tm1 = h_t
+            c_tm1 = c_t
 
         # concatenate chars
         outputs = [''.join(self.target_vocab.id2char[c] for c in chars) for chars in outputs]
