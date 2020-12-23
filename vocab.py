@@ -270,8 +270,8 @@ class Vocab(object):
         return 'Vocab(source %d words, target %d words)' % (len(self.src), len(self.tgt))
 
 
-if __name__ == '__main__':
-    args = docopt(__doc__)
+def main(argv):
+    args = docopt(__doc__, argv=argv)
 
     print('read in source sentences: %s' % args['--train-src'])
     print('read in target sentences: %s' % args['--train-tgt'])
@@ -284,3 +284,6 @@ if __name__ == '__main__':
 
     vocab.save(args['VOCAB_FILE'])
     print('vocabulary saved to %s' % args['VOCAB_FILE'])
+
+if __name__ == '__main__':
+    main()
